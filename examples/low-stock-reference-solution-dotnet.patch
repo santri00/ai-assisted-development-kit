@@ -1,0 +1,196 @@
+diff -ru before/src/ShelfStock.Api/InventoryEndpoints.cs after/src/ShelfStock.Api/InventoryEndpoints.cs
+--- before/src/ShelfStock.Api/InventoryEndpoints.cs	2026-10-21 08:31:11.253870817 -0400
++++ after/src/ShelfStock.Api/InventoryEndpoints.cs	2026-10-21 08:31:11.283764562 -0400
+@@ -6,6 +6,8 @@
+ 
+ public sealed record RemoveRequest(int Quantity);
+ 
++public sealed record ThresholdRequest(int Threshold);
++
+ /// <summary>HTTP transport for the inventory. Domain exceptions are mapped to status codes ONLY here.</summary>
+ public static class InventoryEndpoints
+ {
+@@ -15,6 +17,8 @@
+ 
+         routes.MapGet("/items", (InventoryStore store) => Results.Ok(store.List()));
+ 
++        routes.MapGet("/items/low-stock", (InventoryStore store) => Results.Ok(store.LowStock()));
++
+         routes.MapGet(
+             "/items/{sku}",
+             (string sku, InventoryStore store) => Handle(() => Results.Ok(store.Get(sku))));
+@@ -29,6 +33,11 @@
+             (string sku, RemoveRequest body, InventoryStore store) =>
+                 Handle(() => Results.Ok(store.Remove(sku, body.Quantity))));
+ 
++        routes.MapPost(
++            "/items/{sku}/threshold",
++            (string sku, ThresholdRequest body, InventoryStore store) =>
++                Handle(() => Results.Ok(store.SetThreshold(sku, body.Threshold))));
++
+         return routes;
+     }
+ 
+@@ -48,7 +57,7 @@
+     {
+         ItemNotFoundException => StatusCodes.Status404NotFound,
+         InsufficientStockException => StatusCodes.Status409Conflict,
+-        InvalidQuantityException or InvalidSkuException => StatusCodes.Status400BadRequest,
++        InvalidQuantityException or InvalidSkuException or InvalidThresholdException => StatusCodes.Status400BadRequest,
+         _ => StatusCodes.Status500InternalServerError,
+     };
+ }
+diff -ru before/src/ShelfStock.Core/InventoryExceptions.cs after/src/ShelfStock.Core/InventoryExceptions.cs
+--- before/src/ShelfStock.Core/InventoryExceptions.cs	2026-10-21 08:31:11.253428416 -0400
++++ after/src/ShelfStock.Core/InventoryExceptions.cs	2026-10-21 08:31:11.283598402 -0400
+@@ -40,3 +40,11 @@
+     {
+     }
+ }
++
++public sealed class InvalidThresholdException : InventoryException
++{
++    public InvalidThresholdException()
++        : base("threshold must be >= 0")
++    {
++    }
++}
+diff -ru before/src/ShelfStock.Core/InventoryStore.cs after/src/ShelfStock.Core/InventoryStore.cs
+--- before/src/ShelfStock.Core/InventoryStore.cs	2026-10-21 08:31:11.253548897 -0400
++++ after/src/ShelfStock.Core/InventoryStore.cs	2026-10-21 08:31:11.283682324 -0400
+@@ -23,7 +23,7 @@
+         {
+             _items.TryGetValue(sku, out var existing);
+             var resolvedName = string.IsNullOrEmpty(name) ? existing?.Name ?? string.Empty : name;
+-            var updated = new Item(sku, resolvedName, (existing?.Quantity ?? 0) + quantity);
++            var updated = new Item(sku, resolvedName, (existing?.Quantity ?? 0) + quantity, existing?.Threshold ?? 0);
+             _items[sku] = updated;
+             return updated;
+         }
+@@ -55,6 +55,31 @@
+         }
+     }
+ 
++    /// <summary>Sets the reorder threshold. Zero disables low-stock flagging.</summary>
++    public Item SetThreshold(string sku, int threshold)
++    {
++        if (threshold < 0)
++        {
++            throw new InvalidThresholdException();
++        }
++
++        lock (_gate)
++        {
++            if (!_items.TryGetValue(sku, out var existing))
++            {
++                throw new ItemNotFoundException(sku);
++            }
++
++            var updated = existing with { Threshold = threshold };
++            _items[sku] = updated;
++            return updated;
++        }
++    }
++
++    /// <summary>Items with Threshold &gt; 0 and Quantity &lt;= Threshold, sorted by SKU.</summary>
++    public IReadOnlyList<Item> LowStock() =>
++        List().Where(i => i.Threshold > 0 && i.Quantity <= i.Threshold).ToList();
++
+     public Item Get(string sku)
+     {
+         lock (_gate)
+diff -ru before/src/ShelfStock.Core/Item.cs after/src/ShelfStock.Core/Item.cs
+--- before/src/ShelfStock.Core/Item.cs	2026-10-21 08:31:11.253387182 -0400
++++ after/src/ShelfStock.Core/Item.cs	2026-10-21 08:31:11.283505122 -0400
+@@ -1,4 +1,4 @@
+ namespace ShelfStock.Core;
+ 
+ /// <summary>A stocked product identified by SKU.</summary>
+-public sealed record Item(string Sku, string Name, int Quantity);
++public sealed record Item(string Sku, string Name, int Quantity, int Threshold = 0);
+diff -ru before/tests/ShelfStock.Tests/ApiTests.cs after/tests/ShelfStock.Tests/ApiTests.cs
+--- before/tests/ShelfStock.Tests/ApiTests.cs	2026-10-21 08:31:11.254113755 -0400
++++ after/tests/ShelfStock.Tests/ApiTests.cs	2026-10-21 08:31:11.283915890 -0400
+@@ -47,6 +47,8 @@
+     [InlineData("POST", "/items/A/add", """{"quantity":0}""", 400)]
+     [InlineData("POST", "/items/A/add", """{"quantity":1,"unknown":true}""", 400)]
+     [InlineData("POST", "/items/A/remove", """{"quantity":9}""", 409)]
++    [InlineData("POST", "/items/A/threshold", """{"threshold":-1}""", 400)]
++    [InlineData("POST", "/items/nope/threshold", """{"threshold":1}""", 404)]
+     public async Task Returns_expected_status_code(string method, string path, string body, int expected)
+     {
+         await using var factory = new WebApplicationFactory<Program>();
+@@ -63,4 +65,20 @@
+ 
+         Assert.Equal(expected, (int)response.StatusCode);
+     }
++
++    [Fact]
++    public async Task Low_stock_route_is_not_captured_by_the_sku_route()
++    {
++        await using var factory = new WebApplicationFactory<Program>();
++        using var client = factory.CreateClient();
++        using var addA = await PostJsonAsync(client, "/items/A/add", """{"name":"Alpha","quantity":3}""");
++        using var addB = await PostJsonAsync(client, "/items/B/add", """{"name":"Beta","quantity":9}""");
++        using var thresholdA = await PostJsonAsync(client, "/items/A/threshold", """{"threshold":5}""");
++        using var thresholdB = await PostJsonAsync(client, "/items/B/threshold", """{"threshold":5}""");
++
++        var low = await client.GetFromJsonAsync<List<Item>>("/items/low-stock");
++
++        Assert.NotNull(low);
++        Assert.Equal(new[] { "A" }, low.Select(i => i.Sku).ToArray());
++    }
+ }
+diff -ru before/tests/ShelfStock.Tests/InventoryStoreTests.cs after/tests/ShelfStock.Tests/InventoryStoreTests.cs
+--- before/tests/ShelfStock.Tests/InventoryStoreTests.cs	2026-10-21 08:31:11.254217934 -0400
++++ after/tests/ShelfStock.Tests/InventoryStoreTests.cs	2026-10-21 08:31:11.283840992 -0400
+@@ -66,4 +66,49 @@
+ 
+         Assert.Equal(new[] { "A", "B" }, items.Select(i => i.Sku).ToArray());
+     }
++
++    [Fact]
++    public void LowStock_returns_only_items_at_or_below_a_positive_threshold()
++    {
++        var store = new InventoryStore();
++        store.Add("A", "a", 3);
++        store.Add("B", "b", 9);
++        store.Add("C", "c", 1);
++        store.SetThreshold("A", 5);
++        store.SetThreshold("B", 5);
++
++        var low = store.LowStock();
++
++        Assert.Equal(new[] { "A" }, low.Select(i => i.Sku).ToArray());
++    }
++
++    [Fact]
++    public void LowStock_is_empty_not_null_when_nothing_is_low()
++    {
++        Assert.Empty(new InventoryStore().LowStock());
++    }
++
++    [Fact]
++    public void SetThreshold_rejects_unknown_sku_and_negative_values()
++    {
++        var store = new InventoryStore();
++        store.Add("A", "a", 1);
++
++        Assert.Throws<ItemNotFoundException>(() => store.SetThreshold("missing", 1));
++        Assert.Throws<InvalidThresholdException>(() => store.SetThreshold("A", -1));
++    }
++
++    [Fact]
++    public void Add_and_Remove_preserve_the_threshold()
++    {
++        var store = new InventoryStore();
++        store.Add("A", "a", 5);
++        store.SetThreshold("A", 4);
++
++        var afterAdd = store.Add("A", null, 1);
++        var afterRemove = store.Remove("A", 1);
++
++        Assert.Equal(4, afterAdd.Threshold);
++        Assert.Equal(4, afterRemove.Threshold);
++    }
+ }

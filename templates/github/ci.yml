@@ -1,0 +1,47 @@
+# Language-neutral CI skeleton. Copy to .github/workflows/ci.yml and replace the toolchain step.
+# Principle: CI runs the SAME `task check` that agents and humans run locally.
+name: ci
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # --- Replace with your toolchain setup ---
+      # Go:     - uses: actions/setup-go@v5      with: { go-version-file: go.mod }
+      # Node:   - uses: actions/setup-node@v4    with: { node-version-file: .nvmrc }
+      # Python: - uses: actions/setup-python@v5  with: { python-version-file: .python-version }
+      # Java:   - uses: actions/setup-java@v4    with: { distribution: temurin, java-version: 21 }
+      # -----------------------------------------
+      - uses: arduino/setup-task@v2
+        with:
+          version: 3.x
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Full check
+        run: task check
+
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build and test in container
+        run: |
+          docker build --target test .
+          docker build --target runtime -t app:ci .
+
+  secret-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      # Pick one scanner your org approves (gitleaks, trufflehog, GitHub secret scanning push protection).
+      - name: Scan for secrets
+        run: echo "wire up your approved secret scanner here"

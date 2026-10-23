@@ -1,0 +1,34 @@
+# Local development stack template. Secrets come from an untracked .env or a secret manager,
+# never from this file. Add dependencies (database, cache) as extra services with named volumes.
+services:
+  app:
+    build:
+      context: .
+      target: runtime
+    image: myservice:dev
+    ports:
+      - "8080:8080"
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    restart: unless-stopped
+    develop:
+      watch:
+        - action: rebuild
+          path: ./src
+
+  # Example dependency (uncomment and adapt):
+  # db:
+  #   image: postgres:17-alpine
+  #   environment:
+  #     POSTGRES_PASSWORD_FILE: /run/secrets/db_password
+  #   volumes:
+  #     - dbdata:/var/lib/postgresql/data
+  #   secrets: [db_password]
+# volumes:
+#   dbdata:
+# secrets:
+#   db_password:
+#     file: ./.secrets/db_password   # git-ignored, local only

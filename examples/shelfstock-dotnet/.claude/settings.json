@@ -1,0 +1,46 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(task check)",
+      "Bash(task test:*)",
+      "Bash(task lint)",
+      "Bash(task build)",
+      "Bash(task fmt)",
+      "Bash(task restore)",
+      "Bash(task docker:check)",
+      "Bash(dotnet test:*)",
+      "Bash(dotnet build:*)",
+      "Bash(git status)",
+      "Bash(git diff:*)",
+      "Bash(git log:*)"
+    ],
+    "deny": [
+      "Read(./.env)",
+      "Read(./.env.*)",
+      "Read(./**/appsettings.Production.json)",
+      "Bash(rm -rf:*)",
+      "Bash(git push:*)",
+      "Bash(curl:*)",
+      "Bash(sudo:*)",
+      "Bash(dotnet nuget push:*)",
+      "Bash(dotnet add package:*)",
+      "Bash(docker run:*)",
+      "Bash(docker system prune:*)",
+      "Bash(docker volume rm:*)",
+      "Bash(docker compose down -v:*)"
+    ]
+  },
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "task fmt >/dev/null 2>&1 || true"
+          }
+        ]
+      }
+    ]
+  }
+}

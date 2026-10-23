@@ -1,0 +1,27 @@
+# syntax=docker/dockerfile:1
+# .NET multi-stage template. Targets: test (checks, fails build on failure) and runtime (non-root).
+# Replace MyApp names/paths. Copy EVERY .csproj before restore so the restore layer is cached.
+ARG DOTNET_VERSION=10.0
+
+FROM mcr.microsoft.com/dotnet/sdk:${DOTNET_VERSION} AS base
+WORKDIR /src
+COPY global.json Directory.Build.props .editorconfig MyApp.slnx ./
+COPY src/MyApp.Core/MyApp.Core.csproj src/MyApp.Core/
+COPY src/MyApp.Api/MyApp.Api.csproj src/MyApp.Api/
+COPY tests/MyApp.Tests/MyApp.Tests.csproj tests/MyApp.Tests/
+RUN dotnet restore
+COPY . .
+
+FROM base AS test
+RUN dotnet format --verify-no-changes --no-restore && dotnet test --no-restore --nologo
+
+FROM base AS publish
+RUN dotnet publish src/MyApp.Api/MyApp.Api.csproj -c Release --no-restore -o /out /p:UseAppHost=false
+
+FROM mcr.microsoft.com/dotnet/aspnet:${DOTNET_VERSION} AS runtime
+WORKDIR /app
+COPY --from=publish /out ./
+USER $APP_UID
+ENV ASPNETCORE_HTTP_PORTS=8080
+EXPOSE 8080
+ENTRYPOINT ["dotnet", "MyApp.Api.dll"]

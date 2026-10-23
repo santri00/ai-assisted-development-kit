@@ -1,0 +1,80 @@
+# Language-neutral Taskfile skeleton (https://taskfile.dev).
+# Keep these task NAMES identical in every repo, whatever the language: agents, CI and humans
+# then use one vocabulary. Replace the commands under each task with your toolchain's.
+#
+# Install Task once:  winget install Task.Task | brew install go-task | npm i -g @go-task/cli
+#                     | go install github.com/go-task/task/v3/cmd/task@latest
+version: '3'
+
+vars:
+  IMAGE: myservice:dev
+
+tasks:
+  default:
+    desc: List available tasks
+    silent: true
+    cmds:
+      - task --list
+
+  deps:
+    desc: Install/restore dependencies
+    cmds:
+      - 'echo "TODO: go mod download | dotnet restore | npm ci | pip install -r requirements.txt"'
+
+  build:
+    desc: Compile / package
+    cmds:
+      - 'echo "TODO: go build ./... | dotnet build | npm run build"'
+
+  test:
+    desc: Fast, hermetic unit tests
+    cmds:
+      - 'echo "TODO: go test ./... | dotnet test | npm test | pytest"'
+
+  fmt:
+    desc: Auto-format
+    cmds:
+      - 'echo "TODO: gofmt -w . | dotnet format | prettier -w . | ruff format"'
+
+  lint:
+    desc: Static checks + verify formatting (must FAIL on violations, never modify files)
+    cmds:
+      - 'echo "TODO: go vet + gofmt -l | dotnet format --verify-no-changes | eslint | ruff check"'
+
+  check:
+    desc: "FULL PRE-MERGE CHECK (definition of done): lint + build + test"
+    cmds:
+      - task: lint
+      - task: build
+      - task: test
+
+  run:
+    desc: Run locally
+    cmds:
+      - 'echo "TODO: start the app"'
+
+  # ---- Containers (Docker Desktop / Docker Engine must be running) --------------------------
+  docker:check:
+    desc: Run the checks inside a Linux container (CI parity; works on Windows hosts)
+    cmds:
+      - docker build --target test .
+
+  docker:build:
+    desc: Build the runtime image
+    cmds:
+      - docker build --target runtime -t {{.IMAGE}} .
+
+  docker:up:
+    desc: Start the local stack
+    cmds:
+      - docker compose up --build -d
+
+  docker:logs:
+    desc: Tail logs
+    cmds:
+      - docker compose logs -f
+
+  docker:down:
+    desc: Stop the local stack
+    cmds:
+      - docker compose down

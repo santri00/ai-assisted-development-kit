@@ -1,0 +1,21 @@
+services:
+  shelfstock:
+    build:
+      context: .
+      target: runtime
+    image: shelfstock:dev
+    ports:
+      - "8080:8080"
+    environment:
+      SHELFSTOCK_ADDR: ":8080"
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    restart: unless-stopped
+    # `docker compose up --watch` rebuilds the image when source changes.
+    develop:
+      watch:
+        - action: rebuild
+          path: ./cmd
+        - action: rebuild
+          path: ./internal

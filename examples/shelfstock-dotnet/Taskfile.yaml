@@ -1,0 +1,83 @@
+# https://taskfile.dev  -  run `task --list` to see targets.
+# Same command vocabulary as every repo in this kit: build, test, lint, fmt, check, run.
+version: '3'
+
+vars:
+  IMAGE: shelfstock-dotnet:dev
+
+tasks:
+  default:
+    desc: List available tasks
+    silent: true
+    cmds:
+      - task --list
+
+  restore:
+    desc: Restore NuGet packages
+    cmds:
+      - dotnet restore
+
+  build:
+    desc: Compile everything (warnings are errors)
+    deps: [restore]
+    cmds:
+      - dotnet build --no-restore --nologo
+
+  test:
+    desc: Run unit + in-process API tests
+    deps: [restore]
+    cmds:
+      - dotnet test --no-restore --nologo
+
+  fmt:
+    desc: Auto-format (whitespace, style, analyzers per .editorconfig)
+    cmds:
+      - dotnet format
+
+  lint:
+    desc: Verify formatting and style without changing files
+    cmds:
+      - dotnet format --verify-no-changes
+
+  check:
+    desc: "FULL PRE-MERGE CHECK (definition of done): lint + build + test"
+    cmds:
+      - task: lint
+      - task: build
+      - task: test
+
+  run:
+    desc: Run the API locally on http://localhost:8080
+    cmds:
+      - dotnet run --project src/ShelfStock.Api
+
+  # ---- Docker (needs Docker Desktop / Docker Engine running) -----------------------------
+  docker:check:
+    desc: Run format check + tests inside the Linux SDK container (CI parity)
+    cmds:
+      - docker build --target test .
+
+  docker:build:
+    desc: Build the runtime image
+    cmds:
+      - docker build --target runtime -t {{.IMAGE}} .
+
+  docker:up:
+    desc: Build and start the API via Docker Compose (http://localhost:8080)
+    cmds:
+      - docker compose up --build -d
+
+  docker:watch:
+    desc: Start with Compose Watch (rebuilds on code change)
+    cmds:
+      - docker compose up --build --watch
+
+  docker:logs:
+    desc: Tail service logs
+    cmds:
+      - docker compose logs -f
+
+  docker:down:
+    desc: Stop and remove the Compose stack
+    cmds:
+      - docker compose down

@@ -1,0 +1,9 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/ShelfStock.Core/ShelfStock.Core.csproj" />
+    <Project Path="src/ShelfStock.Api/ShelfStock.Api.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/ShelfStock.Tests/ShelfStock.Tests.csproj" />
+  </Folder>
+</Solution>

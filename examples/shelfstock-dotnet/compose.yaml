@@ -1,0 +1,30 @@
+services:
+  shelfstock:
+    build:
+      context: .
+      target: runtime
+    image: shelfstock-dotnet:dev
+    ports:
+      - "8080:8080"
+    environment:
+      ASPNETCORE_HTTP_PORTS: "8080"
+      ASPNETCORE_ENVIRONMENT: Development
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    restart: unless-stopped
+    # TCP-level check: the aspnet image has bash but no curl/wget. For HTTP-level checks use
+    # orchestrator probes against /healthz (Kubernetes) or add curl to a derived image.
+    healthcheck:
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/8080"]
+      interval: 15s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+    # `docker compose up --watch` rebuilds the image when source changes.
+    develop:
+      watch:
+        - action: rebuild
+          path: ./src

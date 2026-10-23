@@ -1,0 +1,16 @@
+# Codex CLI configuration starter.
+# User-level file: ~/.codex/config.toml. Many Codex versions also honour a project-level
+# .codex/config.toml for trusted projects. Option names evolve - confirm against the current
+# Codex docs (https://developers.openai.com/codex) before rolling out to a team.
+
+# Ask before running commands that are not on the trusted list.
+approval_policy = "on-request"
+
+# Agent may write inside the workspace only; no network by default.
+sandbox_mode = "workspace-write"
+
+[sandbox_workspace_write]
+network_access = false
+
+# Keep AGENTS.md instructions reasonably sized so they are not truncated.
+project_doc_max_bytes = 32768

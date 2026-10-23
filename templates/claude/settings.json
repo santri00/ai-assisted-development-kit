@@ -1,0 +1,41 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(task check)",
+      "Bash(task test)",
+      "Bash(task lint)",
+      "Bash(task build)",
+      "Bash(task fmt)",
+      "Bash(git status)",
+      "Bash(git diff:*)",
+      "Bash(git log:*)",
+      "Bash(task docker:check)"
+    ],
+    "deny": [
+      "Read(./.env)",
+      "Read(./.env.*)",
+      "Read(./secrets/**)",
+      "Bash(rm -rf:*)",
+      "Bash(git push:*)",
+      "Bash(curl:*)",
+      "Bash(sudo:*)",
+      "Bash(docker run:*)",
+      "Bash(docker system prune:*)",
+      "Bash(docker volume rm:*)",
+      "Bash(docker compose down -v:*)"
+    ]
+  },
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "task fmt >/dev/null 2>&1 || true"
+          }
+        ]
+      }
+    ]
+  }
+}

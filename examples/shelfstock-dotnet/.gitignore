@@ -1,0 +1,8 @@
+bin/
+obj/
+.vs/
+*.user
+.env
+.env.*
+.claude/settings.local.json
+TestResults/

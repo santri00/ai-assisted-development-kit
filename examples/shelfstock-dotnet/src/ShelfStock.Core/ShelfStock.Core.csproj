@@ -1,0 +1,4 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Domain library. Deliberately has NO project or framework-web references:
+       the compiler enforces "Core must not depend on Api". -->
+</Project>

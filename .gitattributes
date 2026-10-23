@@ -1,0 +1,9 @@
+# Normalise line endings. Critical on Windows: CRLF in shell scripts, Dockerfiles or
+# Taskfile scripts breaks them inside Linux containers.
+* text=auto eol=lf
+*.sh text eol=lf
+Dockerfile text eol=lf
+*.yaml text eol=lf
+*.yml text eol=lf
+*.go text eol=lf
+*.ps1 text eol=crlf

@@ -1,0 +1,16 @@
+**/bin
+**/obj
+.git
+.gitignore
+.vs
+.claude
+.codex
+.github
+docs
+*.md
+Taskfile.yaml
+compose.yaml
+Dockerfile
+.dockerignore
+.env
+.env.*

@@ -1,0 +1,9 @@
+# OS/editor noise
+.DS_Store
+Thumbs.db
+.vs/
+.idea/
+*.swp
+
+# extraction bundle left by setup; safe to delete
+_kit-bundle.tgz

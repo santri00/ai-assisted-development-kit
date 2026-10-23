@@ -1,0 +1,83 @@
+# https://taskfile.dev  -  run `task --list` to see targets.
+# Same command vocabulary as every repo in this kit: build, test, lint, fmt, check, run.
+version: '3'
+
+vars:
+  IMAGE: shelfstock:dev
+  # The race detector needs cgo + a C compiler. That is present on Linux/macOS/CI and inside
+  # Docker, but usually NOT on a plain Windows install. Default: race on, except on Windows.
+  # Force it anywhere with:  task test RACE=-race
+  RACE: '{{if eq OS "windows"}}{{else}}-race{{end}}'
+
+tasks:
+  default:
+    desc: List available tasks
+    silent: true
+    cmds:
+      - task --list
+
+  build:
+    desc: Compile all packages
+    cmds:
+      - go build ./...
+
+  test:
+    desc: Run unit tests (race detector where supported)
+    cmds:
+      - go test {{.RACE}} ./...
+
+  fmt:
+    desc: Auto-format Go code
+    cmds:
+      - gofmt -l -w .
+
+  lint:
+    desc: go vet + verify gofmt (fails if files need formatting)
+    cmds:
+      - go vet ./...
+      - |
+        out="$(gofmt -l .)"
+        if [ -n "$out" ]; then echo "gofmt needed:"; echo "$out"; exit 1; fi
+
+  check:
+    desc: "FULL PRE-MERGE CHECK (definition of done): lint + test + build"
+    cmds:
+      - task: lint
+      - task: test
+      - task: build
+
+  run:
+    desc: Run the service locally on :8080 (override with SHELFSTOCK_ADDR)
+    cmds:
+      - go run ./cmd/shelfstock
+
+  # ---- Docker (needs Docker Desktop / Docker Engine running) -----------------------------
+  docker:check:
+    desc: Run vet + race tests inside Linux Docker (same result as CI, works on Windows)
+    cmds:
+      - docker build --target test .
+
+  docker:build:
+    desc: Build the runtime image
+    cmds:
+      - docker build --target runtime -t {{.IMAGE}} .
+
+  docker:up:
+    desc: Build and start the service via Docker Compose (http://localhost:8080)
+    cmds:
+      - docker compose up --build -d
+
+  docker:watch:
+    desc: Start with Compose Watch (rebuilds on code change)
+    cmds:
+      - docker compose up --build --watch
+
+  docker:logs:
+    desc: Tail service logs
+    cmds:
+      - docker compose logs -f
+
+  docker:down:
+    desc: Stop and remove the Compose stack
+    cmds:
+      - docker compose down

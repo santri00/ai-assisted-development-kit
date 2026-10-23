@@ -1,0 +1,185 @@
+diff -ru before/internal/httpapi/handler.go after/internal/httpapi/handler.go
+--- before/internal/httpapi/handler.go	2026-10-21 08:26:47.110718932 -0400
++++ after/internal/httpapi/handler.go	2026-10-21 08:26:47.129167804 -0400
+@@ -22,7 +22,9 @@
+ 	mux := http.NewServeMux()
+ 	mux.HandleFunc("GET /healthz", health)
+ 	mux.HandleFunc("GET /items", h.list)
++	mux.HandleFunc("GET /items/low-stock", h.lowStock)
+ 	mux.HandleFunc("GET /items/{sku}", h.get)
++	mux.HandleFunc("POST /items/{sku}/threshold", h.threshold)
+ 	mux.HandleFunc("POST /items/{sku}/add", h.add)
+ 	mux.HandleFunc("POST /items/{sku}/remove", h.remove)
+ 	return mux
+@@ -34,6 +36,10 @@
+ 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+ }
+ 
++type thresholdBody struct {
++	Threshold int `json:"threshold"`
++}
++
+ type qtyBody struct {
+ 	Name     string `json:"name"`
+ 	Quantity int    `json:"quantity"`
+@@ -78,6 +84,23 @@
+ 	writeJSON(w, http.StatusOK, it)
+ }
+ 
++func (h *handler) lowStock(w http.ResponseWriter, _ *http.Request) {
++	writeJSON(w, http.StatusOK, h.store.LowStock())
++}
++
++func (h *handler) threshold(w http.ResponseWriter, r *http.Request) {
++	var b thresholdBody
++	if !decode(w, r, &b) {
++		return
++	}
++	it, err := h.store.SetThreshold(r.PathValue("sku"), b.Threshold)
++	if err != nil {
++		writeErr(w, err)
++		return
++	}
++	writeJSON(w, http.StatusOK, it)
++}
++
+ func decode(w http.ResponseWriter, r *http.Request, v any) bool {
+ 	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
+ 	dec := json.NewDecoder(r.Body)
+@@ -96,7 +119,7 @@
+ 		status = http.StatusNotFound
+ 	case errors.Is(err, inventory.ErrInsufficientStock):
+ 		status = http.StatusConflict
+-	case errors.Is(err, inventory.ErrInvalidQuantity), errors.Is(err, inventory.ErrInvalidSKU):
++	case errors.Is(err, inventory.ErrInvalidQuantity), errors.Is(err, inventory.ErrInvalidSKU), errors.Is(err, inventory.ErrInvalidThreshold):
+ 		status = http.StatusBadRequest
+ 	}
+ 	writeJSON(w, status, map[string]string{"error": strings.TrimSpace(err.Error())})
+diff -ru before/internal/httpapi/handler_test.go after/internal/httpapi/handler_test.go
+--- before/internal/httpapi/handler_test.go	2026-10-21 08:26:47.110828082 -0400
++++ after/internal/httpapi/handler_test.go	2026-10-21 08:26:47.129223992 -0400
+@@ -57,3 +57,34 @@
+ 		t.Fatalf("healthz: %d %s", rec.Code, rec.Body)
+ 	}
+ }
++
++func TestLowStockEndpoint(t *testing.T) {
++	h := New(inventory.NewStore())
++	do(t, h, "POST", "/items/A/add", `{"name":"Alpha","quantity":3}`)
++	do(t, h, "POST", "/items/B/add", `{"name":"Beta","quantity":9}`)
++
++	if rec := do(t, h, "POST", "/items/A/threshold", `{"threshold":5}`); rec.Code != http.StatusOK {
++		t.Fatalf("threshold: %d %s", rec.Code, rec.Body)
++	}
++	do(t, h, "POST", "/items/B/threshold", `{"threshold":5}`)
++
++	rec := do(t, h, "GET", "/items/low-stock", "")
++	if rec.Code != http.StatusOK {
++		t.Fatalf("low-stock: %d %s", rec.Code, rec.Body)
++	}
++	body := rec.Body.String()
++	if !strings.Contains(body, `"sku":"A"`) || strings.Contains(body, `"sku":"B"`) {
++		t.Fatalf("unexpected body: %s", body)
++	}
++}
++
++func TestThresholdStatusCodes(t *testing.T) {
++	h := New(inventory.NewStore())
++	do(t, h, "POST", "/items/A/add", `{"quantity":1}`)
++	if rec := do(t, h, "POST", "/items/nope/threshold", `{"threshold":1}`); rec.Code != http.StatusNotFound {
++		t.Fatalf("got %d, want 404", rec.Code)
++	}
++	if rec := do(t, h, "POST", "/items/A/threshold", `{"threshold":-1}`); rec.Code != http.StatusBadRequest {
++		t.Fatalf("got %d, want 400", rec.Code)
++	}
++}
+diff -ru before/internal/inventory/inventory.go after/internal/inventory/inventory.go
+--- before/internal/inventory/inventory.go	2026-10-21 08:26:47.110363697 -0400
++++ after/internal/inventory/inventory.go	2026-10-21 08:26:47.131960301 -0400
+@@ -14,13 +14,15 @@
+ 	ErrInsufficientStock = errors.New("inventory: insufficient stock")
+ 	ErrInvalidQuantity   = errors.New("inventory: quantity must be positive")
+ 	ErrInvalidSKU        = errors.New("inventory: sku must not be empty")
++	ErrInvalidThreshold  = errors.New("inventory: threshold must be >= 0")
+ )
+ 
+ // Item is a stocked product identified by SKU.
+ type Item struct {
+-	SKU      string `json:"sku"`
+-	Name     string `json:"name"`
+-	Quantity int    `json:"quantity"`
++	SKU       string `json:"sku"`
++	Name      string `json:"name"`
++	Quantity  int    `json:"quantity"`
++	Threshold int    `json:"threshold"`
+ }
+ 
+ // Store is an in-memory, concurrency-safe inventory.
+@@ -95,3 +97,30 @@
+ 	sort.Slice(out, func(i, j int) bool { return out[i].SKU < out[j].SKU })
+ 	return out
+ }
++
++// SetThreshold sets the reorder threshold for sku. Zero disables low-stock flagging.
++func (s *Store) SetThreshold(sku string, threshold int) (Item, error) {
++	if threshold < 0 {
++		return Item{}, ErrInvalidThreshold
++	}
++	s.mu.Lock()
++	defer s.mu.Unlock()
++	it, ok := s.items[sku]
++	if !ok {
++		return Item{}, fmt.Errorf("%w: %s", ErrNotFound, sku)
++	}
++	it.Threshold = threshold
++	s.items[sku] = it
++	return it, nil
++}
++
++// LowStock returns items with threshold > 0 and quantity <= threshold, sorted by SKU.
++func (s *Store) LowStock() []Item {
++	out := []Item{}
++	for _, it := range s.List() {
++		if it.Threshold > 0 && it.Quantity <= it.Threshold {
++			out = append(out, it)
++		}
++	}
++	return out
++}
+diff -ru before/internal/inventory/inventory_test.go after/internal/inventory/inventory_test.go
+--- before/internal/inventory/inventory_test.go	2026-10-21 08:26:47.110471190 -0400
++++ after/internal/inventory/inventory_test.go	2026-10-21 08:26:47.129092556 -0400
+@@ -65,3 +65,33 @@
+ 		t.Fatalf("unexpected order: %+v", got)
+ 	}
+ }
++
++func TestThresholdAndLowStock(t *testing.T) {
++	s := NewStore()
++	_, _ = s.Add("A", "a", 3)
++	_, _ = s.Add("B", "b", 9)
++	_, _ = s.Add("C", "c", 1)
++
++	if _, err := s.SetThreshold("A", 5); err != nil {
++		t.Fatalf("SetThreshold: %v", err)
++	}
++	if _, err := s.SetThreshold("B", 5); err != nil {
++		t.Fatalf("SetThreshold: %v", err)
++	}
++	if _, err := s.SetThreshold("missing", 1); !errors.Is(err, ErrNotFound) {
++		t.Fatalf("got %v, want ErrNotFound", err)
++	}
++	if _, err := s.SetThreshold("A", -1); !errors.Is(err, ErrInvalidThreshold) {
++		t.Fatalf("got %v, want ErrInvalidThreshold", err)
++	}
++	got := s.LowStock()
++	if len(got) != 1 || got[0].SKU != "A" {
++		t.Fatalf("LowStock = %+v, want only A", got)
++	}
++}
++
++func TestLowStockEmptyIsNotNil(t *testing.T) {
++	if got := NewStore().LowStock(); got == nil {
++		t.Fatal("LowStock must return an empty slice, not nil (JSON [] not null)")
++	}
++}
