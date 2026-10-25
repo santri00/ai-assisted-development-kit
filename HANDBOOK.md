@@ -7,7 +7,7 @@ A step-by-step, tool-agnostic, language-agnostic guide to adopting AI coding age
 - **Command runner:** [Task](https://taskfile.dev) (`Taskfile.yaml`) in both examples, with identical task names. Step 1 evaluates it honestly, including its shortcomings.
 - **Local runtime:** Dockerfile + Docker Compose, designed for teams on Docker Desktop (including Windows). See Step 4b.
 - **Companion files:** `PLAYBOOK.md` (the short team reference) and `templates/` (copy-paste starters).
-- **Tool focus:** Claude Code (you) and Codex (your team). Copilot is covered lightly. The scaffolding works for all three.
+- **Tool focus:** Claude Code and Codex. Copilot is covered lightly. The scaffolding works for all three.
 
 > **A note on freshness.** Tool details (flags, config keys, slash commands) change quickly. The *method* in this handbook is stable; wherever a specific tool setting appears, confirm it in the vendor docs linked in [Appendix C](#appendix-c--further-reading) before rolling it out.
 
@@ -73,8 +73,8 @@ A step-by-step, tool-agnostic, language-agnostic guide to adopting AI coding age
 |---|---|
 | Go example: `task check`, failing-lint negative test, Windows-style no-race path, reference patch applied to a clean copy | Executed and passing (Go 1.24, Task 3.54) |
 | Taskfile template and all YAML/JSON/XML files | Parsed successfully; the Go and template Taskfiles also run under Task |
-| Go `Dockerfile` / `compose.yaml` | Compose file parses; the static binary builds with the Dockerfile's exact flags. **Image not built**: no Docker daemon was available while authoring |
-| **.NET example (all of it)** | **Not compiled or tested**: no .NET SDK or NuGet access while authoring. Files were structure-checked and the reference patch applies cleanly, but expect small fixes on first run |
+| Go `Dockerfile` / `compose.yaml` | Compose file parses; the static binary builds with the Dockerfile's exact flags. **Image not built** |
+| **.NET example (all of it)** | **Not compiled or tested** |
 | .NET `Dockerfile` / `compose.yaml` | **Image not built** |
 
 On your machine, the first run of the .NET track is: `task fmt`, then `task check`. Likeliest first-run adjustments: SDK/TFM mismatch (`global.json`, `Directory.Build.props`), a package version, or `dotnet format` re-spacing. Fixing those is itself a good exercise in using an agent with a failing check as the steering wheel.
@@ -91,7 +91,7 @@ cd examples/shelfstock-dotnet
 task fmt            # once, to settle formatting
 task check          # format check + build (warnings are errors) + tests
 
-git init && git add -A && git commit -m "baseline"   # so you can diff and revert agent changes
+git init && git add -A && git commit -m "baseline"
 ```
 
 Each example already contains the *finished* scaffold (AGENTS.md, docs, settings) so you can read what "good" looks like. For hands-on learning, **delete the scaffold files and rebuild them yourself step by step**, using the originals as an answer key:
@@ -101,7 +101,7 @@ Each example already contains the *finished* scaffold (AGENTS.md, docs, settings
 rm -rf AGENTS.md CLAUDE.md .claude .codex .github docs      # keep Taskfile.yaml, Dockerfile, compose.yaml: those are Steps 1 and 4b
 ```
 
-The practice feature is **low-stock alerts** (`docs/specs/low-stock-alerts.md`). A reference solution for each track is provided as a patch (`examples/low-stock-reference-solution-go.patch`, `examples/low-stock-reference-solution-dotnet.patch`; the .NET one is uncompiled, see above). Do not peek until you have tried it.
+The practice feature is **low-stock alerts** (`docs/specs/low-stock-alerts.md`). A reference solution for each track is provided as a patch (`examples/low-stock-reference-solution-go.patch`, `examples/low-stock-reference-solution-dotnet.patch`; the .NET one is uncompiled). Do not peek until you have tried it.
 
 ---
 
@@ -135,7 +135,7 @@ Everything useful follows from this:
 | 2. Chat | Ask questions, paste snippets | Chat panes | Low-Med |
 | 3. Agent, supervised | Agent edits and runs commands; human approves and reviews | Claude Code, Codex CLI | Med |
 | 4. Agent, directed with a harness | Spec-driven; agent verifies itself against tests/CI; human reviews outcomes | Same tools + standard scaffold | Med |
-| 5. Agent, automated | Agents triggered by tickets/CI; produce PRs unattended | Cloud agents, GitHub integration, headless CLI | Med-High |
+| 5. Agent, automated | Agents triggered by tickets/CI; produce PRs unattended | Cloud agents, GitHub/Bitbucket integration, headless CLI | Med-High |
 
 **This handbook takes you to Level 4 and shows how to approach Level 5 safely.** Skipping to Level 5 without the scaffolding of Levels 3-4 is the most common reason rollouts fail.
 
@@ -189,7 +189,7 @@ repo/
 | Pillar | Artifact | Why it is portable |
 |---|---|---|
 | Instructions | `AGENTS.md` | Plain Markdown. Read natively by Codex and other agents; Claude Code imports it with `@AGENTS.md`; Copilot can read it or be pointed to it |
-| Verification | `task check` (or `npm run check`, `./gradlew check`, `tox`, ...) | Any agent can run a shell command |
+| Verification | `task check` | Any agent can run a shell command |
 | Environment | `Dockerfile` (`test` + `runtime` stages) and `compose.yaml` | The same Linux build on Windows, macOS, CI and cloud agents; Docker Desktop runs it locally |
 | Process | Spec -> plan -> small slices -> review | It is a way of working, not a feature of a product |
 
@@ -201,13 +201,13 @@ The tool-specific files (`.claude/`, `.codex/`) hold **permissions and convenien
 
 ### Step 0 · Set up your tools safely
 
-**Goal:** have Claude Code and Codex installed, authenticated with company accounts, and running in restricted modes.
+**Goal:** have Claude Code and Codex installed, authenticated with the account, and running in restricted modes.
 
 **Why it matters:** Agents run commands on your machine. Start restrictive; loosen deliberately.
 
 **What to do**
 
-1. Install and authenticate through your organisation's approved route (SSO / enterprise plan). Do not use personal accounts on company code. See [Step 11](#step-11--security-ip-and-compliance).
+1. Install and authenticate through approved route (SSO / enterprise plan). Do not use personal accounts on company code. See [Step 11](#step-11--security-ip-and-compliance).
 2. Learn the three permission postures every tool offers in some form:
 
 | Posture | Meaning | Claude Code | Codex |
@@ -287,7 +287,7 @@ tasks:
 
 #### 1.1 Choosing the command runner: Task vs Make vs the rest
 
-The *names* (`check`, `test`, ...) are the standard. The runner is an implementation detail you can swap. This kit uses Task because the team is likely to include Windows developers on Docker Desktop, and `make` is not available on Windows by default.
+The *names* (`check`, `test`, ...) are the standard. The runner is an implementation detail you can swap. This kit uses Task as an example because I am using Windows environment with the Docker Desktop, and `make` is not available on Windows by default.
 
 | Option | Strengths | Weaknesses | Good fit |
 |---|---|---|---|
@@ -298,7 +298,7 @@ The *names* (`check`, `test`, ...) are the standard. The runner is an implementa
 | **Native** (`npm run`, `dotnet`, `gradlew`) | Zero extra tooling | Names differ per ecosystem; no uniform vocabulary across repos | Single-language orgs; also valid for .NET (`task` here is only a thin wrapper) |
 | **Scripts** (`.sh` + `.ps1`) | No dependency | Two scripts to keep in sync; drift | Last resort |
 
-**Shortcomings of Taskfile.yaml to plan for** (several were hit while building this kit):
+**Shortcomings of Taskfile.yaml to plan for**:
 
 | # | Shortcoming | Why it matters | Mitigation |
 |---|---|---|---|
@@ -317,7 +317,7 @@ The *names* (`check`, `test`, ...) are the standard. The runner is an implementa
 
 **Exercise:** introduce a deliberate failure (change an expected value in a test). Confirm `task check` fails clearly. Revert. A check that cannot fail is useless.
 
-**Done when:** a new engineer (or fresh agent session) can clone, run `task check`, and trust the result.
+**Done when:** run `task check`, and trust the result.
 
 ---
 
@@ -413,8 +413,6 @@ Now test it. In a fresh session, with no other context, ask the agent: "Add a `G
   "hooks": [ { "type": "command", "command": "task fmt >/dev/null 2>&1 || true" } ] } ] }
 ```
 
-> **Lesson learned while building this kit:** an automated search-and-replace edit to the Go source silently did nothing because `gofmt` had re-aligned whitespace. The compiler (`undefined: ErrInvalidThreshold`) caught it immediately. Fast, loud checks are what make agent mistakes cheap. Never rely on an agent's claim that an edit "worked".
-
 **Exercise:** ask the agent to "read .env and summarise it." Confirm the deny rule blocks it. Then ask it to run `git push`. Confirm it is blocked or requires approval.
 
 **Done when:** the dangerous actions on your list fail even if you *ask* the agent to do them.
@@ -466,7 +464,7 @@ Now test it. In a fresh session, with no other context, ask the agent: "Add a `G
 - **`.gitattributes` with `eol=lf`** and `.editorconfig` with `end_of_line = lf`.
 - Task runs commands in its own portable shell, so `$(...)` in a Taskfile works from PowerShell; the tools you call (`go`, `dotnet`, `docker`) must be on the PATH.
 - Go's `-race` needs cgo and gcc on Windows: use `task docker:check` instead of installing a C toolchain.
-- Docker Desktop **licensing and managed settings**: confirm your organisation's entitlement and use a managed, approved install.
+- Docker Desktop **licensing and managed settings**: use a managed and approved install.
 - Cap WSL2 memory/CPU (`.wslconfig`) so an agent session plus image builds do not starve the machine.
 
 **Worked example (both repos)**
@@ -484,7 +482,7 @@ Now watch the guardrails work. In a Claude Code session ask: "Start the service 
 
 **Exercise:** (1) Write `task docker:smoke` that waits for health, adds stock, reads it back, and fails on mismatch. (2) Put the agent in a dev container (`templates/docker/devcontainer.json`), mount only the repo, and confirm it cannot read your home directory. (3) Break the build on purpose (introduce a CRLF `Dockerfile`) and see how `.gitattributes` prevents it.
 
-**Done when:** `task docker:check` and `task docker:up` work on every team member's Docker Desktop, the agent can reach Docker only through allow-listed tasks, and CI builds the same `test` target.
+**Done when:** `task docker:check` and `task docker:up` work on Docker Desktop, the agent can reach Docker only through allow-listed tasks, and CI builds the same `test` target.
 
 ---
 
@@ -622,7 +620,7 @@ What good output looks like (Go): a table-driven `TestSetThreshold` with cases f
 ```bash
 # Go track (use `git apply --check -p1 <file>` if `patch` is not installed, e.g. on Windows)
 cd examples/shelfstock-go     && patch -p1 --dry-run < ../low-stock-reference-solution-go.patch
-# .NET track (uncompiled reference: treat failures as part of the exercise)
+# .NET track (This is uncompiled reference; needs review: treat failures as part of the exercise)
 cd examples/shelfstock-dotnet && patch -p1 --dry-run < ../low-stock-reference-solution-dotnet.patch
 ```
 
@@ -674,7 +672,7 @@ Both patches are *dry runs*: inspect them, do not apply them over your own work.
 
 **Goal:** turn good prompts and workflows into shared team assets.
 
-**Why it matters:** Consistency is what makes results predictable across engineers. The asset library is where your team's accumulated practice lives.
+**Why it matters:** Consistency is what makes results predictable across engineers. The asset library is where team's accumulated practice lives.
 
 **The asset ladder, from most portable to most tool-specific**
 

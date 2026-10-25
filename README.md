@@ -1,6 +1,6 @@
-# AI-Assisted Development Kit
+# AI-Assisted Development Kit Example
 
-A tool-agnostic, language-agnostic kit for adopting AI coding agents (Claude Code, Codex, Copilot) in an engineering team. Two runnable reference repos (Go and .NET), a Taskfile-based command vocabulary, and Docker/Docker Desktop support.
+A tool-agnostic, language-agnostic kit for adopting AI coding agents (Claude Code, Codex, Copilot) in an engineering team. Two runnable reference repos (Go and .NET), a Taskfile-based command vocabulary, and Docker/Docker Desktop support. The kit was built with the help of Claude.
 
 | Start here | Purpose |
 |---|---|
